@@ -16,47 +16,81 @@ def search():
     use_index = index_var.get() == 1
 
     if match_rsv_var.get():
-        # Perform RSV match
-        descriptor_file = "DescriptorTokenPorter.txt"
-        inverse_file = "InverseTokenPorter.txt"
-        results = process_rsv_results(query, descriptor_file, inverse_file)
-        update_rsv_table(results)
+    # Perform RSV match using dynamically determined files
+        descriptor_file = f"Descriptor{token_method}{stem_method}.txt"
+        inverse_file = f"Inverse{token_method}{stem_method}.txt"
+
+        try:
+            results = process_rsv_results(query, descriptor_file, inverse_file)
+            update_rsv_table(results)
+        except FileNotFoundError as e:
+            messagebox.showerror("Error", f"File not found: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to compute RSV: {e}")
     else:
-        # Perform descriptor/inverse index search
-        results = load_descriptor_or_index(query[0], search_type, token_method, stem_method, use_index)
-        update_results_table(results, search_type)
+        # Perform descriptor/inverse index search using the selected options
+        try:
+            results = load_descriptor_or_index(query[0], search_type, token_method, stem_method, use_index)
+            update_results_table(results, search_type)
+        except FileNotFoundError as e:
+            messagebox.showerror("Error", f"File not found: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load data: {e}")
 
 def process_rsv_results(query, descriptor_file, inverse_file):
+    selected_method = rsv_method_var.get()  # Get the selected RSV method
     try:
         scalar_scores, cosine_scores, jaccard_scores = compute_rsv(query, descriptor_file, inverse_file)
-        return {
-            "Scalar Product": scalar_scores,
-            "Cosine Similarity": cosine_scores,
-            "Jaccard Index": jaccard_scores
-        }
+
+        if selected_method == "Scalar Product":
+            return {doc_id: score for doc_id, score in scalar_scores.items() if score > 0.0}
+        elif selected_method == "Cosine Similarity":
+            return {doc_id: score for doc_id, score in cosine_scores.items() if score > 0.0}
+        elif selected_method == "Jaccard Index":
+            return {doc_id: score for doc_id, score in jaccard_scores.items() if score > 0.0}
+        else:
+            return {}
     except Exception as e:
         messagebox.showerror("Error", f"Failed to compute RSV: {e}")
         return {}
 
+def update_rsv_table(scores):
+    results_table.delete(*results_table.get_children())
+    for doc_id, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+        results_table.insert("", "end", values=("", doc_id, "", "", round(score, 4)))
+
 # Function to update the results table dynamically for standard search
 def update_results_table(data, search_type):
+    # Clear previous entries
     results_table.delete(*results_table.get_children())
-    if search_type == "terms_per_doc":
-        results_table.config(columns=("№", "Term", "Doc", "Freq", "Poids"))
-        for i, (term, doc_id, freq, weight) in enumerate(data, start=1):
-            results_table.insert("", "end", values=(i, doc_id, term, freq, weight))
-    else:
-        results_table.config(columns=("№", "Doc", "Term", "Freq", "Poids"))
-        for i, (doc_id, term, freq, weight) in enumerate(data, start=1):
-            results_table.insert("", "end", values=(i, term, doc_id, freq, weight))
 
-# Function to update the results table for RSV results
-def update_rsv_table(results):
-    results_table.delete(*results_table.get_children())
-    for method, scores in results.items():
-        results_table.insert("", "end", values=(method, "", "", "", ""))
-        for doc_id, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-            results_table.insert("", "end", values=("", doc_id, "", "", round(score, 4)))
+    # Dynamically configure columns based on the search type
+    if search_type == "terms_per_doc":
+        columns = ("№", "Term", "Doc", "Freq", "Poids")
+        results_table.config(columns=columns)
+
+        # Update column headings
+        for col in columns:
+            results_table.heading(col, text=col)
+            results_table.column(col, width=120, anchor="center")
+
+        # Populate the table with data
+        for i, (term, doc_id, freq, weight) in enumerate(data, start=1):
+            results_table.insert("", "end", values=(i, term, doc_id, freq, weight))
+    elif search_type == "docs_per_term":
+        columns = ("№", "Term", "Doc", "Freq", "Poids")
+        results_table.config(columns=columns)
+
+        # Update column headings
+        for col in columns:
+            results_table.heading(col, text=col)
+            results_table.column(col, width=120, anchor="center")
+
+        # Populate the table with data
+        for i, (doc_id, term, freq, weight) in enumerate(data, start=1):
+            results_table.insert("", "end", values=(i, doc_id, term, freq, weight))
+
+
 
 # Main application window
 root = ttk.Window(themename="superhero")
@@ -106,7 +140,18 @@ stem_options = {1: "", 2: "Porter", 3: "Lancaster"}
 ttk.Radiobutton(normalization_frame, text="No stem", variable=stem_rb_var, value=1).pack(anchor="w", pady=2)
 ttk.Radiobutton(normalization_frame, text="Porter Stemmer", variable=stem_rb_var, value=2).pack(anchor="w", pady=2)
 ttk.Radiobutton(normalization_frame, text="Lancaster Stemmer", variable=stem_rb_var, value=3).pack(anchor="w", pady=2)
-
+# RSV Method Dropdown Menu
+rsv_method_frame = ttk.Frame(options_frame)
+rsv_method_frame.pack(side=LEFT, padx=10)
+ttk.Label(rsv_method_frame, text="RSV Method:").pack(side=LEFT, padx=5)
+rsv_method_var = ttk.StringVar(value="Scalar Product")
+rsv_method_combobox = ttk.Combobox(
+    rsv_method_frame,
+    textvariable=rsv_method_var,
+    values=["Scalar Product", "Cosine Similarity", "Jaccard Index"],
+    state="readonly"
+)
+rsv_method_combobox.pack(side=LEFT)
 # Results Table Section
 results_frame = ttk.Frame(main_frame)
 results_frame.pack(fill=BOTH, expand=True, pady=10)
