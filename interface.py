@@ -43,16 +43,21 @@ def process_rsv_results(query, descriptor_file, inverse_file):
         scalar_scores, cosine_scores, jaccard_scores = compute_rsv(query, descriptor_file, inverse_file)
 
         if selected_method == "Scalar Product":
-            return {doc_id: score for doc_id, score in scalar_scores.items() if score > 0.0}
+            scores = {doc_id: score for doc_id, score in scalar_scores.items() if score > 0.0}
         elif selected_method == "Cosine Similarity":
-            return {doc_id: score for doc_id, score in cosine_scores.items() if score > 0.0}
+            scores = {doc_id: score for doc_id, score in cosine_scores.items() if score > 0.0}
         elif selected_method == "Jaccard Index":
-            return {doc_id: score for doc_id, score in jaccard_scores.items() if score > 0.0}
+            scores = {doc_id: score for doc_id, score in jaccard_scores.items() if score > 0.0}
         else:
             return {}
+
+        # Sort scores in descending order
+        sorted_scores = dict(sorted(scores.items(), key=lambda x: x[1], reverse=True))
+        return sorted_scores
     except Exception as e:
         messagebox.showerror("Error", f"Failed to compute RSV: {e}")
         return {}
+
 
 def update_rsv_table(scores):
     results_table.delete(*results_table.get_children())
